@@ -20,76 +20,77 @@ export function activate(context: vscode.ExtensionContext) {
 
         // ペースト判定: 2行以上増加
         if (lineDifference >= 2) {
-            console.log('HELLO');
-            console.log(`Lines increased by ${lineDifference} (from ${previousLineCount} to ${currentLineCount})`);
-
             const changes = event.contentChanges;
+
             if (changes.length === 1) {
                 const change = changes[0];
-                const startLine = change.range.start.line;
 
-                console.log(`Pasted starting at line ${startLine + 1}`);
-
-                // ドキュメントとペーストされた内容を取得
-                const document = event.document;
+                // ペーストされた内容を取得
                 const pastedText = change.text;
+
+                // ペーストされた内容が空文字列または空行だけの場合は処理をスキップ
+                if (!pastedText.trim()) {
+                    console.log('Paste operation skipped: No content to paste.');
+                    return;
+                }
+
                 const pastedLines = pastedText.split(/\r?\n/);
 
-                if (pastedLines.length > 1) {
-                    // 各行のタブ数またはスペース数をログに表示
-                    console.log('--- Indentation (Tabs + Spaces) per Line ---');
-                    pastedLines.forEach((line, index) => {
-                        const indentCount = countIndentAsTabs(line);
-                        console.log(`Line ${index + 1}: "${line}" -> Indent as Tabs: ${indentCount}`);
-                    });
-                    console.log('--------------------------------------------');
+                // 各行のタブ数またはスペース数をログに表示
+                console.log('--- Indentation (Tabs + Spaces) per Line ---');
+                pastedLines.forEach((line, index) => {
+                    const indentCount = countIndentAsTabs(line);
+                    console.log(`Line ${index + 1}: "${line}" -> Indent as Tabs: ${indentCount}`);
+                });
+                console.log('--------------------------------------------');
 
-                    // 元データの1行目のインデントを取得
-                    const firstLineIndent = countIndentAsTabs(pastedLines[0]);
-                    console.log(`Original first line indent: ${firstLineIndent}`);
+                const startLine = change.range.start.line;
 
-                    // ペースト先の行の既存インデントを取得
-                    const pasteTargetLineText = document.lineAt(startLine).text;
-                    const pasteTargetIndent = countIndentAsTabs(pasteTargetLineText); // 常に数値を返すことを確認
-                    console.log(`Paste target indent after insertion: ${pasteTargetIndent}`);
+                // 元データの1行目のインデントを取得
+                const firstLineIndent = countIndentAsTabs(pastedLines[0]);
+                console.log(`Original first line indent: ${firstLineIndent}`);
 
-                    // 元データの相対インデント差を調整
-                    const adjustedLines = pastedLines.map((line, index) => {
-                        if (index === 0) {
-                            // 1行目はペースト元のインデントを保持して、そのままペースト
-                            const resultLine = '\t'.repeat(Math.max(0, pasteTargetIndent)) + line.trimStart();
-                            console.log(`Adjusted Line ${index + 1}: "${resultLine}" -> Tabs After Paste: ${countIndentAsTabs(resultLine)}`);
-                            return resultLine;
-                        }
+                // ペースト先の行の既存インデントを取得
+                const pasteTargetLineText = event.document.lineAt(startLine).text;
+                const pasteTargetIndent = countIndentAsTabs(pasteTargetLineText); // 常に数値を返すことを確認
+                console.log(`Paste target indent after insertion: ${pasteTargetIndent}`);
 
-                        // 2行目以降: 元データの相対インデントを保持して調整
-                        const currentIndent = countIndentAsTabs(line);
-                        const relativeIndent = currentIndent - firstLineIndent;
-
-                        // ペースト後の1行目を基準に相対インデントを調整
-                        const adjustedIndent = pasteTargetIndent + relativeIndent;
-
-                        const resultLine = '\t'.repeat(Math.max(0, adjustedIndent)) + line.trimStart();
+                // 元データの相対インデント差を調整
+                const adjustedLines = pastedLines.map((line, index) => {
+                    if (index === 0) {
+                        // 1行目はペースト元のインデントを保持して、そのままペースト
+                        const resultLine = '\t'.repeat(Math.max(0, pasteTargetIndent)) + line.trimStart();
                         console.log(`Adjusted Line ${index + 1}: "${resultLine}" -> Tabs After Paste: ${countIndentAsTabs(resultLine)}`);
                         return resultLine;
-                    });
+                    }
 
-                    // ペースト範囲全体を置き換える
-                    const fullRange = new vscode.Range(
-                        new vscode.Position(startLine, 0),
-                        new vscode.Position(
-                            startLine + adjustedLines.length - 1,
-                            document.lineAt(startLine + adjustedLines.length - 1).text.length
-                        )
-                    );
+                    // 2行目以降: 元データの相対インデントを保持して調整
+                    const currentIndent = countIndentAsTabs(line);
+                    const relativeIndent = currentIndent - firstLineIndent;
 
-                    editor.edit(editBuilder => {
-                        editBuilder.replace(fullRange, adjustedLines.join('\n'));
-                    });
+                    // ペースト後の1行目を基準に相対インデントを調整
+                    const adjustedIndent = pasteTargetIndent + relativeIndent;
 
-                    console.log('Adjusted lines:');
-                    console.log(adjustedLines.join('\n'));
-                }
+                    const resultLine = '\t'.repeat(Math.max(0, adjustedIndent)) + line.trimStart();
+                    console.log(`Adjusted Line ${index + 1}: "${resultLine}" -> Tabs After Paste: ${countIndentAsTabs(resultLine)}`);
+                    return resultLine;
+                });
+
+                // ペースト範囲全体を置き換える
+                const fullRange = new vscode.Range(
+                    new vscode.Position(startLine, 0),
+                    new vscode.Position(
+                        startLine + adjustedLines.length - 1,
+                        event.document.lineAt(startLine + adjustedLines.length - 1).text.length
+                    )
+                );
+
+                editor.edit(editBuilder => {
+                    editBuilder.replace(fullRange, adjustedLines.join('\n'));
+                });
+
+                console.log('Adjusted lines:');
+                console.log(adjustedLines.join('\n'));
             }
         } else {
             console.log('Change is not a paste operation (line increase < 2).');
